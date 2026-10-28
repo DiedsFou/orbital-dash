@@ -114,6 +114,12 @@ The panel fits the map to the rooms automatically; `vacuum.mapRotate` (0, 90, -9
 
 No build step: `orbital-dash.js` is a single plain script. To check a change without HA, load it in headless Chromium with a mock `hass` object (`el.panel = { config }`, `el.hass = { states, callService }`).
 
+## Support
+
+If Orbital Dash is useful to you, you can support its development:
+
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/dieds)
+
 ## License
 
 MIT, see [LICENSE](LICENSE) (draft; confirm before publishing).
