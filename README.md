@@ -71,7 +71,7 @@ config:
     lights_on_other: "{n} Lampen an · tippen zum Ausschalten"
 ```
 
-Temperatures use the unit your weather entity reports. The vacuum's area is shown as "m²" and can be changed with `strings: { vac_area: "sq ft" }`. The Dutch labels were written without a native check; corrections welcome.
+Temperatures use the unit your weather entity reports. The vacuum's area is shown as "m²" and can be changed with `strings: { vac_area: "sq ft" }`. The Dutch labels have been checked by a native speaker; corrections to any language are welcome.
 
 **Screensaver.** After a while untouched the screen dims into an ambient mode (slowly moving clock, anti burn-in). A touch always wakes it. Everything is optional:
 
