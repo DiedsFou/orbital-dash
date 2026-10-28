@@ -122,4 +122,4 @@ If Orbital Dash is useful to you, you can support its development:
 
 ## License
 
-MIT, see [LICENSE](LICENSE) (draft; confirm before publishing).
+MIT, see [LICENSE](LICENSE).
