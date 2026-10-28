@@ -1,0 +1,2 @@
+# Let the admin user (input group) write the backlight HID report of the Waveshare 7" round panel
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="0712", ATTRS{idProduct}=="000a", MODE="0660", GROUP="input"

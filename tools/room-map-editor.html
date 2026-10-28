@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; connect-src 'none'; form-action 'none'; base-uri 'none'">
+<title>Orbital Dash room map editor</title>
+<style>
+:root { color-scheme: dark; --bg:#0b1020; --panel:#121a30; --panel2:#18223f; --line:#2a3865; --text:#e6eeff; --muted:#8da2cc; --accent:#5ef0ff; --warn:#ffb454; }
+* { box-sizing:border-box; }
+html, body { margin:0; height:100%; background:var(--bg); color:var(--text); font:14px/1.45 system-ui, "Segoe UI", Roboto, sans-serif; }
+body { display:flex; flex-direction:column; overflow:hidden; }
+header { padding:12px 18px; border-bottom:1px solid var(--line); }
+header h1 { margin:0 0 2px; font-size:18px; font-weight:600; }
+header p { margin:0; color:var(--muted); max-width:980px; }
+main { display:grid; grid-template-columns:minmax(0,1fr) 380px; flex:1; min-height:0; }
+@media (max-width:900px) { body { overflow:auto; display:block; } main { grid-template-columns:1fr; } #stage { height:70vh; } }
+#stage { position:relative; min-height:320px; background:#060912; }
+#cv { position:absolute; inset:0; width:100%; height:100%; display:block; touch-action:none; cursor:crosshair; }
+.bar { position:absolute; left:10px; top:10px; display:flex; gap:6px; flex-wrap:wrap; z-index:2; }
+button, select, input[type=text] { font:inherit; color:var(--text); background:var(--panel2); border:1px solid var(--line); border-radius:8px; padding:6px 10px; }
+button { cursor:pointer; } button:hover { border-color:var(--accent); } button.primary { background:#0f3a46; border-color:var(--accent); }
+button:disabled { opacity:.45; cursor:default; }
+#hint { position:absolute; left:10px; bottom:10px; right:10px; z-index:2; pointer-events:none; color:var(--muted); font-size:13px; text-shadow:0 0 4px #000; }
+#drop { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; text-align:center; color:var(--muted); pointer-events:none; padding:30px; }
+aside { overflow-y:auto; overflow-x:hidden; min-width:0; border-left:1px solid var(--line); background:var(--panel); padding:14px; display:flex; flex-direction:column; gap:14px; }
+h2 { margin:0 0 6px; font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); font-weight:600; }
+.rooms { display:flex; flex-direction:column; gap:4px; }
+.rm { display:flex; align-items:center; gap:8px; padding:6px 8px; border:1px solid var(--line); border-radius:8px; cursor:pointer; background:var(--panel2); }
+.rm.sel { border-color:var(--accent); } .rm i { width:14px; height:14px; border-radius:50%; flex:none; } .rm span { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } .rm small { color:var(--muted); }
+.row { display:flex; align-items:center; gap:8px; margin:6px 0; } .row label { width:84px; color:var(--muted); flex:none; } .row input[type=text], .row select { flex:1; min-width:0; }
+.sw { display:flex; gap:5px; flex-wrap:wrap; } .sw b { width:22px; height:22px; border-radius:50%; cursor:pointer; border:2px solid transparent; } .sw b.on { border-color:#fff; }
+textarea { width:100%; height:150px; resize:vertical; font:12px/1.4 ui-monospace, Consolas, monospace; color:var(--text); background:#0a0f1e; border:1px solid var(--line); border-radius:8px; padding:8px; }
+#prev { width:100%; height:200px; background:#060912; border:1px solid var(--line); border-radius:8px; }
+.note { color:var(--muted); font-size:12.5px; } .bad { color:var(--warn); }
+kbd { background:var(--panel2); border:1px solid var(--line); border-radius:4px; padding:0 4px; font-size:12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Orbital Dash room map editor</h1>
+  <p>Load a screenshot of your vacuum app's map, trace each room, then copy the result into <code>vacuum:</code> in your panel config. Everything runs in your browser; the image never leaves it.</p>
+</header>
+<main>
+  <section id="stage">
+    <canvas id="cv"></canvas>
+    <div id="drop">Drop your map screenshot here, paste it (Ctrl+V), or use “Load image”.</div>
+    <div class="bar">
+      <button id="load" class="primary">Load image</button><input id="file" type="file" accept="image/*" hidden>
+      <button id="newRoom" disabled>New room</button>
+      <button id="finish" disabled>Close shape (Enter)</button>
+      <button id="fit" disabled>Fit view</button>
+    </div>
+    <div id="hint"></div>
+  </section>
+  <aside>
+    <div>
+      <h2>Rooms</h2>
+      <div class="rooms" id="list"></div>
+      <div class="note" id="listNote">No rooms yet. Press “New room”, then click the corners of a room on the map.</div>
+    </div>
+    <div id="props" hidden>
+      <h2>Selected room</h2>
+      <div class="row"><label for="rid">Area id</label><input id="rid" type="text" placeholder="living_room" spellcheck="false"></div>
+      <div class="note" style="margin:-2px 0 6px 92px">The Home Assistant area id the room is mapped to (<code>vacuum.clean_area</code>).</div>
+      <div class="row"><label>Colour</label><div class="sw" id="sw"></div></div>
+      <div class="row"><label for="icon">Icon</label><select id="icon"></select></div>
+      <div class="row"><label for="isz">Icon size</label><input id="isz" type="range" min="10" max="400" value="100" style="flex:1"></div>
+      <div class="row"><label>Label</label><button id="lab">Set label position</button><button id="labAuto">Auto</button></div>
+      <div class="row"><button id="redraw">Redraw shape</button><button id="del">Delete room</button></div>
+    </div>
+    <div>
+      <h2>Preview (as in the panel)</h2>
+      <svg id="prev" xmlns="http://www.w3.org/2000/svg"></svg>
+      <div class="row" style="margin-top:8px"><label for="rot">Rotate map</label>
+        <select id="rot"><option value="0">0° (as in the screenshot)</option><option value="-90">−90° (turn left)</option><option value="90">90° (turn right)</option><option value="180">180°</option></select></div>
+    </div>
+    <div>
+      <h2>Config</h2>
+      <textarea id="out" readonly spellcheck="false" placeholder="Your rooms appear here"></textarea>
+      <div class="row"><button id="copy" class="primary">Copy</button><button id="imp">Import existing rooms…</button></div>
+      <div class="note">Paste under <code>vacuum:</code> in the panel config (keep the indentation: children of <code>vacuum:</code> are indented 8 spaces in <code>examples/configuration.yaml</code>).</div>
+      <div class="note" id="msg"></div>
+    </div>
+    <div class="note">
+      <b>Tips.</b> Corners snap to other rooms' corners (hold <kbd>Alt</kbd> to switch off). Drag a corner of the selected room to adjust it, <kbd>Shift</kbd>-click a corner to delete it.
+      Scroll to zoom, hold <kbd>Space</kbd> or the middle button to pan. <kbd>Backspace</kbd> removes the last corner while drawing, <kbd>Esc</kbd> cancels.
+    </div>
+  </aside>
+</main>
+<script>
+"use strict";
+const PALETTE = ["#f08aa0", "#f0b860", "#4fd0d0", "#6f9cf0", "#a78bfa", "#4ade80"];
+// 24x24 stroke icons, the same style the panel draws them in
+const ICONS = {
+  none: ["No icon", ""],
+  generic: ["Generic room", "M4 4h16v16H4zM4 12h16"],
+  living_room: ["Living room", "M5 11V8a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v3M3 13a2 2 0 0 1 4 0v1h10v-1a2 2 0 0 1 4 0v5H3zM5 18v2M19 18v2"],
+  bedroom: ["Bedroom", "M3 6v12M3 14h18v4M21 14v-2.5A2.5 2.5 0 0 0 18.5 9H11v5M5.4 11a1.9 1.9 0 1 0 3.8 0 1.9 1.9 0 1 0-3.8 0z"],
+  office: ["Office", "M2 11h20M4 11v9M20 11v9M14 11v6h6v-6M16.5 14h1M7 4h7v5H7zM10.5 9v2"],
+  kitchen: ["Kitchen", "M5 10h14v8a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2zM3 10h18M9 6c0-1.5 1-1.5 1-3M14 6c0-1.5 1-1.5 1-3"],
+  bathroom: ["Bathroom", "M4 12h16v3a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4zM6 12V6a2 2 0 0 1 4 0M7 19l-1 2M17 19l1 2"],
+  toilet: ["Toilet", "M7 3h10v6H7zM5 9h14c0 5-3 8-7 8s-7-3-7-8zM10 17v4h4v-4"],
+  hallway: ["Hallway / door", "M6 21V4h12v17M4 21h16M15 12.5h.01"],
+  dining: ["Dining", "M7 3v7a2 2 0 0 0 4 0V3M9 12v9M17 3c-2 1.5-3 4-3 7h3v11"],
+  laundry: ["Laundry", "M5 3h14v18H5zM5 8h14M9 5.5h.01M12 17.5a3 3 0 1 0 0-.01"],
+  garage: ["Garage / car", "M4 16v-3l2-5h12l2 5v3M3 16h18v3H3zM7 13h.01M17 13h.01"],
+  garden: ["Garden / balcony", "M12 21v-7M12 14c-4 0-6-3-6-7 4 0 6 3 6 7zM12 12c0-3 2-5 5-5 0 3-2 5-5 5z"],
+};
+const $ = (id) => document.getElementById(id);
+const cv = $("cv"), ctx = cv.getContext("2d");
+const S = { img: null, w: 1000, h: 1000, rooms: [], sel: -1, drawing: false, labelMode: false, view: { s: 1, x: 0, y: 0 }, hover: null, rot: 0, drag: null, pan: null, space: false };
+
+// Values from pasted config text are untrusted: only a plain colour and an SVG path made of path characters get through
+const safeColor = (c) => (/^#[0-9a-fA-F]{3,8}$/.test(String(c)) ? c : PALETTE[0]);
+const safePath = (d) => (/^[MmLlHhVvCcSsQqTtAaZz0-9eE\s,.+-]*$/.test(String(d)) ? String(d) : "");
+const room = (o = {}) => ({ id: "", c: PALETTE[S.rooms.length % PALETTE.length], p: [], closed: false, l: null, ip: ICONS.generic[1], s: null, ...o });
+const cur = () => S.rooms[S.sel];
+const toScreen = (p) => [p[0] * S.view.s + S.view.x, p[1] * S.view.s + S.view.y];
+const toWorld = (x, y) => [(x - S.view.x) / S.view.s, (y - S.view.y) / S.view.s];
+const bbox = (pts) => { const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]); return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)]; };
+const centroid = (pts) => {
+  let a = 0, cx = 0, cy = 0;
+  for (let i = 0; i < pts.length; i++) { const [x0, y0] = pts[i], [x1, y1] = pts[(i + 1) % pts.length], f = x0 * y1 - x1 * y0; a += f; cx += (x0 + x1) * f; cy += (y0 + y1) * f; }
+  if (Math.abs(a) < 1e-6) { const b = bbox(pts); return [(b[0] + b[2]) / 2, (b[1] + b[3]) / 2]; }
+  return [cx / (3 * a), cy / (3 * a)];
+};
+const inside = (pt, poly) => { let c = false; for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) { const [xi, yi] = poly[i], [xj, yj] = poly[j]; if ((yi > pt[1]) !== (yj > pt[1]) && pt[0] < ((xj - xi) * (pt[1] - yi)) / (yj - yi) + xi) c = !c; } return c; };
+const labelPos = (r) => r.l || centroid(r.p);
+const iconSize = (r) => r.s || Math.max(16, Math.round(Math.min(bbox(r.p)[2] - bbox(r.p)[0], bbox(r.p)[3] - bbox(r.p)[1]) * 0.3));
+
+/* ---------- canvas ---------- */
+function resize() {
+  const r = cv.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+  cv.width = Math.max(1, Math.round(r.width * d)); cv.height = Math.max(1, Math.round(r.height * d));
+  ctx.setTransform(d, 0, 0, d, 0, 0); draw();
+}
+function fit() {
+  const pts = S.rooms.flatMap((r) => r.p), b = S.img ? [0, 0, S.w, S.h] : pts.length ? bbox(pts) : [0, 0, S.w, S.h];
+  const r = cv.getBoundingClientRect(), w = Math.max(1, b[2] - b[0]), h = Math.max(1, b[3] - b[1]), pad = 40;
+  const s = Math.min((r.width - pad * 2) / w, (r.height - pad * 2) / h);
+  S.view = { s, x: (r.width - w * s) / 2 - b[0] * s, y: (r.height - h * s) / 2 - b[1] * s };
+  draw();
+}
+function draw() {
+  const r = cv.getBoundingClientRect();
+  ctx.clearRect(0, 0, r.width, r.height);
+  if (S.img) { ctx.imageSmoothingQuality = "high"; ctx.drawImage(S.img, S.view.x, S.view.y, S.w * S.view.s, S.h * S.view.s); }
+  else { ctx.fillStyle = "#0a0f1e"; ctx.fillRect(S.view.x, S.view.y, S.w * S.view.s, S.h * S.view.s); }
+  S.rooms.forEach((rm, i) => {
+    if (!rm.p.length) return;
+    const sel = i === S.sel, pts = rm.p.map(toScreen);
+    ctx.beginPath(); pts.forEach((p, k) => (k ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])));
+    if (rm.closed) { ctx.closePath(); ctx.fillStyle = rm.c + (sel ? "88" : "55"); ctx.fill(); }
+    else if (S.hover && sel) ctx.lineTo(S.hover[0], S.hover[1]);
+    ctx.lineWidth = sel ? 3 : 2; ctx.strokeStyle = sel ? "#fff" : rm.c; ctx.lineJoin = "round"; ctx.stroke();
+    if (sel) pts.forEach((p, k) => { ctx.beginPath(); ctx.arc(p[0], p[1], k === 0 && !rm.closed ? 7 : 5, 0, 7); ctx.fillStyle = k === 0 && !rm.closed ? "#5ef0ff" : "#fff"; ctx.fill(); ctx.strokeStyle = "#000"; ctx.lineWidth = 1; ctx.stroke(); });
+    if (rm.closed) {
+      const [lx, ly] = toScreen(labelPos(rm)), sz = iconSize(rm) * S.view.s;
+      if (rm.ip) { ctx.save(); ctx.translate(lx, ly); ctx.scale(sz / 24, sz / 24); ctx.translate(-12, -12); ctx.lineWidth = 1.7; ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.strokeStyle = "#fff"; ctx.stroke(new Path2D(rm.ip)); ctx.restore(); }
+      if (rm.id) { ctx.font = "600 13px system-ui"; ctx.textAlign = "center"; ctx.fillStyle = "#fff"; ctx.strokeStyle = "rgba(0,0,0,.7)"; ctx.lineWidth = 3; ctx.strokeText(rm.id, lx, ly + sz / 2 + 14); ctx.fillText(rm.id, lx, ly + sz / 2 + 14); }
+    }
+  });
+  hint();
+}
+function hint() {
+  const rm = cur();
+  $("hint").textContent = !S.img && !S.rooms.length ? "" : S.labelMode ? "Click where the room's icon and name should sit." : S.drawing ? `Drawing “${rm.id || "new room"}”: click the corners, then click the first (blue) corner or press Enter to close. ${rm.p.length} corner${rm.p.length === 1 ? "" : "s"} so far.` : rm ? "Drag a corner to adjust it. Click another room to select it." : "Select a room, or press “New room” to trace another.";
+  $("drop").style.display = S.img || S.rooms.length ? "none" : "flex";
+}
+
+/* ---------- editing ---------- */
+function snap(p, skipRoom, skipIdx, off) {
+  if (off) return p;
+  const lim = 10 / S.view.s; let best = null, bd = lim;
+  S.rooms.forEach((rm, ri) => rm.p.forEach((q, qi) => { if (ri === skipRoom && qi === skipIdx) return; const d = Math.hypot(q[0] - p[0], q[1] - p[1]); if (d < bd) { bd = d; best = q; } }));
+  return best ? [best[0], best[1]] : p;
+}
+const rnd = (p) => [Math.round(p[0]), Math.round(p[1])];
+function newRoom() {
+  if (S.drawing) cancelDraw();
+  S.rooms.push(room()); S.sel = S.rooms.length - 1; S.drawing = true; S.labelMode = false; refresh();
+}
+function closeShape() {
+  const rm = cur(); if (!S.drawing || !rm) return;
+  if (rm.p.length < 3) { msg("A room needs at least 3 corners.", true); return; }
+  rm.closed = true; S.drawing = false; if (!rm.s) rm.s = iconSize(rm); refresh();
+}
+function cancelDraw() {
+  if (!S.drawing) return;
+  const rm = cur(); S.drawing = false;
+  if (rm && !rm.closed) { if (rm.p.length >= 3 && rm.wasClosed) rm.closed = true; else { S.rooms.splice(S.sel, 1); S.sel = Math.min(S.sel, S.rooms.length - 1); } }
+  refresh();
+}
+function selectAt(w) { for (let i = S.rooms.length - 1; i >= 0; i--) if (S.rooms[i].closed && inside(w, S.rooms[i].p)) return i; return -1; }
+function vertexAt(sx, sy) { const rm = cur(); if (!rm) return -1; return rm.p.findIndex((p) => { const q = toScreen(p); return Math.hypot(q[0] - sx, q[1] - sy) < 10; }); }
+
+cv.addEventListener("pointerdown", (e) => {
+  const r = cv.getBoundingClientRect(), sx = e.clientX - r.left, sy = e.clientY - r.top, w = toWorld(sx, sy);
+  try { cv.setPointerCapture(e.pointerId); } catch (_) {}
+  if (e.button === 1 || S.space) { S.pan = { x: e.clientX, y: e.clientY, vx: S.view.x, vy: S.view.y }; return; }
+  if (e.button !== 0) return;
+  const rm = cur();
+  if (S.labelMode && rm) { rm.l = rnd(w); S.labelMode = false; refresh(); return; }
+  if (S.drawing && rm) {
+    if (rm.p.length >= 3 && vertexAt(sx, sy) === 0) { closeShape(); return; }
+    rm.p.push(rnd(snap(w, S.sel, -1, e.altKey))); refresh(); return;
+  }
+  const vi = vertexAt(sx, sy);
+  if (vi >= 0 && rm) {
+    if (e.shiftKey) { if (rm.p.length > 3) { rm.p.splice(vi, 1); refresh(); } return; }
+    S.drag = { ri: S.sel, vi }; return;
+  }
+  S.sel = selectAt(w); refresh();
+});
+cv.addEventListener("pointermove", (e) => {
+  const r = cv.getBoundingClientRect(), sx = e.clientX - r.left, sy = e.clientY - r.top;
+  if (S.pan) { S.view.x = S.pan.vx + e.clientX - S.pan.x; S.view.y = S.pan.vy + e.clientY - S.pan.y; draw(); return; }
+  if (S.drag) { const rm = S.rooms[S.drag.ri]; rm.p[S.drag.vi] = rnd(snap(toWorld(sx, sy), S.drag.ri, S.drag.vi, e.altKey)); refresh(false); return; }
+  S.hover = S.drawing ? [sx, sy] : null; cv.style.cursor = S.space ? "grab" : S.drawing || S.labelMode ? "crosshair" : vertexAt(sx, sy) >= 0 ? "move" : "default";
+  if (S.drawing) draw();
+});
+cv.addEventListener("pointerup", () => { if (S.drag) { S.drag = null; refresh(); } S.pan = null; });
+cv.addEventListener("wheel", (e) => {
+  e.preventDefault();
+  const r = cv.getBoundingClientRect(), sx = e.clientX - r.left, sy = e.clientY - r.top, k = Math.exp(-e.deltaY * 0.0015), w = toWorld(sx, sy);
+  S.view.s = Math.max(0.05, Math.min(40, S.view.s * k)); S.view.x = sx - w[0] * S.view.s; S.view.y = sy - w[1] * S.view.s; draw();
+}, { passive: false });
+addEventListener("keydown", (e) => {
+  const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName);
+  if (e.code === "Space" && !typing) { S.space = true; cv.style.cursor = "grab"; e.preventDefault(); }
+  if (typing) return;
+  if (e.key === "Enter") closeShape();
+  else if (e.key === "Escape") { S.labelMode = false; cancelDraw(); draw(); }
+  else if (e.key === "Backspace" && S.drawing) { cur().p.pop(); refresh(); e.preventDefault(); }
+  else if (e.key === "Delete" && cur() && !S.drawing) delRoom();
+});
+addEventListener("keyup", (e) => { if (e.code === "Space") { S.space = false; cv.style.cursor = "crosshair"; } });
+addEventListener("resize", resize);
+addEventListener("beforeunload", (e) => { if (S.rooms.length) { e.preventDefault(); e.returnValue = ""; } });
+
+/* ---------- side panel ---------- */
+function delRoom() { if (S.sel < 0) return; S.rooms.splice(S.sel, 1); S.sel = Math.min(S.sel, S.rooms.length - 1); S.drawing = false; refresh(); }
+function refresh(full = true) {
+  $("newRoom").disabled = $("fit").disabled = !S.img && !S.rooms.length;
+  $("finish").disabled = !S.drawing;
+  $("listNote").hidden = S.rooms.length > 0;
+  if (full) {
+    $("list").innerHTML = S.rooms.map((r, i) => `<div class="rm ${i === S.sel ? "sel" : ""}" data-i="${i}"><i style="background:${esc(r.c)}"></i><span>${esc(r.id || "(no id yet)")}</span><small>${r.closed ? r.p.length + " corners" : "drawing"}</small></div>`).join("");
+    const rm = cur(); $("props").hidden = !rm;
+    if (rm) {
+      $("rid").value = rm.id; $("isz").value = iconSize(rm); $("isz").max = Math.max(400, iconSize(rm) * 3);
+      $("sw").innerHTML = PALETTE.map((c) => `<b data-c="${esc(c)}" class="${c === rm.c ? "on" : ""}" style="background:${esc(c)}"></b>`).join("");
+      const known = Object.entries(ICONS).find(([, v]) => v[1] === rm.ip);
+      $("icon").innerHTML = Object.entries(ICONS).map(([k, v]) => `<option value="${k}" ${known && known[0] === k ? "selected" : ""}>${v[0]}</option>`).join("") + (known ? "" : `<option value="custom" selected>Custom (imported)</option>`);
+    }
+  }
+  output(); preview(); draw();
+}
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+$("list").addEventListener("click", (e) => { const el = e.target.closest(".rm"); if (!el) return; if (S.drawing) cancelDraw(); S.sel = +el.dataset.i; refresh(); });
+$("rid").addEventListener("input", (e) => { const rm = cur(); if (!rm) return; rm.id = e.target.value.trim(); $("list").querySelector(".sel span").textContent = rm.id || "(no id yet)"; output(); preview(); draw(); });
+$("sw").addEventListener("click", (e) => { const b = e.target.closest("b"); if (b && cur()) { cur().c = b.dataset.c; refresh(); } });
+$("icon").addEventListener("change", (e) => { const rm = cur(); if (rm && ICONS[e.target.value]) { rm.ip = ICONS[e.target.value][1]; refresh(); } });
+$("isz").addEventListener("input", (e) => { const rm = cur(); if (rm) { rm.s = +e.target.value; output(); preview(); draw(); } });
+$("lab").addEventListener("click", () => { if (cur() && cur().closed) { S.labelMode = true; draw(); } });
+$("labAuto").addEventListener("click", () => { if (cur()) { cur().l = null; refresh(false); } });
+$("redraw").addEventListener("click", () => { const rm = cur(); if (!rm) return; rm.wasClosed = rm.closed; rm.p = []; rm.closed = false; S.drawing = true; refresh(); });
+$("del").addEventListener("click", delRoom);
+$("newRoom").addEventListener("click", newRoom);
+$("finish").addEventListener("click", closeShape);
+$("fit").addEventListener("click", fit);
+$("rot").addEventListener("change", (e) => { S.rot = +e.target.value; output(); preview(); });
+
+/* ---------- output + preview ---------- */
+const scrub = (id) => (/^[A-Za-z0-9_]+$/.test(id) ? id : JSON.stringify(id));
+function rotPts(pts, rot) { const c = Math.round(Math.cos((rot * Math.PI) / 180)), s = Math.round(Math.sin((rot * Math.PI) / 180)); return pts.map(([x, y]) => [x * c - y * s, x * s + y * c]); }
+function output() {
+  const done = S.rooms.filter((r) => r.closed);
+  $("out").value = done.length ? ["        mapRotate: " + S.rot, "        rooms:", ...done.map((r) => {
+    const l = rnd(labelPos(r));
+    return `          - { id: ${scrub(r.id || "room")}, c: "${r.c}", l: [${l[0]}, ${l[1]}], p: "${r.p.map((p) => p.join(",")).join(" ")}", i: "${r.ip}", s: ${iconSize(r)} }`;
+  })].join("\n") : "";
+  const ids = done.map((r) => r.id).filter(Boolean), dup = ids.find((x, i) => ids.indexOf(x) !== i);
+  msg(done.some((r) => !r.id) ? "Some rooms have no area id yet." : dup ? `Area id "${dup}" is used twice.` : "", true);
+}
+function preview() {
+  const svg = $("prev"), done = S.rooms.filter((r) => r.closed);
+  if (!done.length) { svg.innerHTML = ""; return; }
+  const pts = rotPts(done.flatMap((r) => r.p), S.rot), b = bbox(pts);
+  svg.setAttribute("viewBox", `${b[0] - 20} ${b[1] - 20} ${b[2] - b[0] + 40} ${b[3] - b[1] + 40}`);
+  const sw = (b[2] - b[0] + 40) / 300;
+  svg.innerHTML = `<g transform="rotate(${S.rot})">` + done.map((r) => `<polygon points="${r.p.map((p) => p.join(",")).join(" ")}" fill="${esc(r.c)}" fill-opacity=".35" stroke="rgba(190,210,255,.6)" stroke-width="${sw}" stroke-linejoin="round"/>`).join("")
+    + done.map((r) => { const l = labelPos(r); return r.ip ? `<g transform="translate(${l[0]} ${l[1]}) rotate(${-S.rot}) scale(${iconSize(r) / 24}) translate(-12 -12)"><path d="${esc(r.ip)}" fill="none" stroke="#eaf2ff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></g>` : ""; }).join("") + "</g>";
+}
+function msg(t, bad) { $("msg").textContent = t; $("msg").className = "note" + (bad ? " bad" : ""); }
+$("copy").addEventListener("click", async () => {
+  const t = $("out").value; if (!t) { msg("Nothing to copy yet.", true); return; }
+  try { await navigator.clipboard.writeText(t); msg("Copied."); } catch (_) { $("out").select(); document.execCommand("copy"); msg("Copied."); }
+});
+$("imp").addEventListener("click", () => {
+  const t = prompt("Paste your existing rooms (the lines starting with “- { id: …”, and mapRotate if you have it):");
+  if (t) importText(t);
+});
+function importText(text) {
+  const rm = /mapRotate:\s*(-?\d+)/.exec(text); if (rm && ["0", "90", "-90", "180"].includes(String(+rm[1]))) { S.rot = +rm[1]; $("rot").value = String(S.rot); }
+  const val = (src, k) => { const m = new RegExp("(?:^|[{,\\s])" + k + ":\\s*(\"[^\"]*\"|'[^']*'|[^,}\\s]+)").exec(src); return m ? m[1].replace(/^["']|["']$/g, "") : null; };
+  let n = 0;
+  (text.match(/\{[^{}]*\}/g) || []).forEach((src) => {
+    const p = val(src, "p"); if (!p) return;
+    const pts = p.trim().split(/\s+/).map((q) => q.split(",").map(Number)).filter((q) => q.length === 2 && q.every(Number.isFinite));
+    if (pts.length < 3) return;
+    const l = /l:\s*\[\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*\]/.exec(src), s = val(src, "s");
+    S.rooms.push(room({ id: (val(src, "id") || "").slice(0, 64), c: safeColor(val(src, "c") || PALETTE[S.rooms.length % PALETTE.length]), p: pts, closed: true, l: l ? [+l[1], +l[2]] : null, ip: safePath(val(src, "i") ?? ""), s: s && Number.isFinite(+s) ? +s : null })); n++;
+  });
+  S.sel = S.rooms.length - 1; refresh(); if (!S.img) fit(); msg(n ? `Imported ${n} room${n > 1 ? "s" : ""}.` : "No rooms found in that text.", !n);
+}
+
+/* ---------- image input ---------- */
+function loadImage(src) {
+  const im = new Image();
+  im.onload = () => { S.img = im; S.w = im.naturalWidth; S.h = im.naturalHeight; resize(); fit(); refresh(); msg(`Image loaded (${S.w}×${S.h}). Coordinates are in image pixels.`); };
+  im.onerror = () => msg("That file could not be read as an image.", true);
+  im.src = src;
+}
+const fromFile = (f) => { if (!f || !f.type.startsWith("image/")) return msg("Please use an image file.", true); const r = new FileReader(); r.onload = () => loadImage(r.result); r.readAsDataURL(f); };
+$("load").addEventListener("click", () => $("file").click());
+$("file").addEventListener("change", (e) => fromFile(e.target.files[0]));
+addEventListener("dragover", (e) => e.preventDefault());
+addEventListener("drop", (e) => { e.preventDefault(); fromFile(e.dataTransfer.files[0]); });
+addEventListener("paste", (e) => { const it = [...(e.clipboardData?.items || [])].find((i) => i.type.startsWith("image/")); if (it) fromFile(it.getAsFile()); });
+
+window.__editor = { S, loadImage, importText, output, closeShape, newRoom, fit, refresh };
+resize(); refresh();
+</script>
+</body>
+</html>

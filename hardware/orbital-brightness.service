@@ -1,0 +1,9 @@
+[Unit]
+Description=Orbital Dash backlight control (Waveshare round panel)
+
+[Service]
+ExecStart=/usr/bin/python3 %h/orbital-dash/hardware/brightness.py --serve
+Restart=always
+
+[Install]
+WantedBy=default.target

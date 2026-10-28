@@ -1,0 +1,63 @@
+# Orbital Dash: panel_custom entry for Home Assistant's configuration.yaml.
+# Install through HACS, or copy orbital-dash.js to /config/www/orbital-dash/ (manual) and use the /local module_url below. Every key under `config:` is optional;
+# see DEFAULTS at the top of orbital-dash.js for the full list and what each one does.
+
+panel_custom:
+  - name: orbital-dash
+    module_url: /hacsfiles/orbital-dash/orbital-dash.js   # HACS install
+    # module_url: /local/orbital-dash/orbital-dash.js?v=1  # manual install: bump v= after updating the file
+    sidebar_title: Orbital Dash
+    sidebar_icon: mdi:circle-outline
+    url_path: orbital-dash
+    require_admin: false
+    config:
+      # pages: [home, lights, scenes, media, agenda, vacuum]   # pick and order pages
+      # showWarnings: true                                      # show config problems on the screen too
+      # theme:
+      #   bg: ["#101a33", "#070b18", "#02030a"]
+      #   accents: { lights: "#ffb454" }
+      weather: weather.forecast_home
+      people: [person.alice, person.bob]
+      defaultLight: light.living_room          # preselected on the Lights page
+      hiddenLights: [light.living_room_zone]   # e.g. a duplicate group
+      sceneRooms:                              # group scenes by entity-id prefix
+        - [scene.living_room, Living room]
+        - [scene.bedroom, Bedroom]
+      mediaPlayers: [media_player.living_room_tv, media_player.kitchen_speaker]
+      calendars: [calendar.family]
+      todo: todo.household_tasks
+      shopping: todo.shopping_list
+
+      # Optional: doorbell alert (event entity) with an "open door" button (lock entity)
+      doorbell: event.front_door_ring
+      doorLock: lock.front_door
+
+      # Optional: vacuum page. Shown only when `id` is set.
+      vacuum:
+        id: vacuum.robot
+        battery: sensor.robot_battery
+        water: select.robot_water_flow_level
+        area: sensor.robot_area_cleaned
+        duration: sensor.robot_cleaning_duration
+        consumables:
+          - [Filter, sensor.robot_filter_lifespan]
+          - [Main brush, sensor.robot_main_brush_lifespan]
+        # rooms: build them with tools/room-map-editor.html and paste the result here (with mapRotate); omit to hide "Clean by room"
+
+      # Optional: radio quick-play on the Media page
+      publicUrl: http://homeassistant.local:8123   # reachable from your cast devices
+      favourites:
+        - { name: Radio 1, sub: Country, logo: radio1.png, url: "https://example.com/stream.mp3", type: audio/mpeg }
+
+      # Optional: screensaver (a touch always wakes it); conditions on any entity
+      # screensaver:
+      #   enabled: true
+      #   mode: orrery                  # or nightsky
+      #   afterMinutes: 5
+      #   startWhen: { entity: binary_sensor.living_room_presence, state: "off" }
+      #   wakeWhen: { entity: binary_sensor.living_room_presence, state: "on" }
+
+      # Optional: ambient-light sensor (lx) drives backlight and screensaver
+      # ambient: { entity: sensor.room_illuminance, darkLux: 2, brightLux: 120 }
+      # Optional: local backlight listener, see hardware/README.md
+      # backlightUrl: http://localhost:8765/
